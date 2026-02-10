@@ -52,8 +52,10 @@
                             class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                     </div>
 
-                    <!-- 剪輯師篩選 (含複製連結功能) -->
-                    <div class="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition">
+                    <!-- 剪輯師篩選 (邏輯修改：鎖定模式 vs 管理員模式) -->
+                    
+                    <!-- 1. 管理員模式 (無參數)：顯示下拉選單 + 複製連結按鈕 -->
+                    <div v-if="!isEditorLocked" class="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden group focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition">
                         <select v-model="filterEditor" class="px-2 py-1.5 text-sm bg-transparent focus:outline-none border-none cursor-pointer max-w-[130px]">
                             <option value="ALL">所有剪輯師</option>
                             <option v-for="editor in uniqueEditors" :key="editor" :value="editor">{{ editor }}</option>
@@ -62,6 +64,16 @@
                             class="px-2 py-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 border-l border-gray-200 transition h-full flex items-center" 
                             title="複製此剪輯師的專屬連結">
                             <i class="fa-solid fa-link"></i>
+                        </button>
+                    </div>
+
+                    <!-- 2. 鎖定模式 (有參數)：只顯示名字，不可切換 -->
+                    <div v-else class="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 shadow-sm">
+                        <i class="fa-solid fa-user-check"></i>
+                        <span class="text-sm font-bold">{{ filterEditor }}</span>
+                        <!-- 取消鎖定按鈕 (選用，回到總覽) -->
+                        <button @click="unlockEditor" class="ml-1 text-blue-400 hover:text-blue-600 rounded-full w-5 h-5 flex items-center justify-center transition" title="回到總覽 (管理員用)">
+                            <i class="fa-solid fa-xmark text-xs"></i>
                         </button>
                     </div>
 
@@ -145,6 +157,7 @@
                                 <i class="fa-solid fa-user-tag text-gray-400"></i> {{ task.client }} 
                                 <span v-if="task.title" class="text-gray-400">({{ task.title }})</span>
                             </div>
+                            <!-- 顯示剪輯師名字 -->
                             <div class="bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                                 <i class="fa-solid fa-user-pen mr-1"></i>{{ task.editor || '未指派' }}
                             </div>
@@ -166,7 +179,7 @@
                         </div>
                     </div>
 
-                    <!-- 編輯與操作區 (改為手動儲存) -->
+                    <!-- 編輯與操作區 -->
                     <div class="p-3 bg-gray-50 border-t border-gray-100 flex flex-col gap-3">
                         
                         <!-- 1. 原始素材 (唯讀 + 連結) -->
@@ -340,14 +353,16 @@
             const loading = ref(true);
             const error = ref(null);
             
-            // 讀取網址參數 (初始化篩選狀態)
+            // 讀取網址參數
             const params = new URLSearchParams(window.location.search);
+            const editorParam = params.get('editor');
+            const isEditorLocked = ref(!!editorParam); // 是否為鎖定狀態
             
             // 狀態變數
             const searchText = ref('');
             const filterStatus = ref('ALL');
             const filterClient = ref('ALL');
-            const filterEditor = ref(params.get('editor') || 'ALL'); // 從網址取得 editor，若無則為 ALL
+            const filterEditor = ref(editorParam || 'ALL'); // 若有參數則鎖定，否則為 ALL
             const viewMode = ref('card');    
             
             const toasts = ref([]);
@@ -374,7 +389,7 @@
                     const matchClient = filterClient.value === 'ALL' || t.client === filterClient.value;
                     // 3. 剪輯師篩選
                     const matchEditor = filterEditor.value === 'ALL' || t.editor === filterEditor.value;
-                    // 4. 關鍵字搜尋 (主題、編號、備註)
+                    // 4. 關鍵字搜尋
                     const matchText = !searchText.value || 
                         [t.topic, t.videoId, t.projectId, t.notes].some(val => String(val || '').toLowerCase().includes(searchText.value.toLowerCase()));
                     
@@ -397,12 +412,22 @@
                 if (filterEditor.value === 'ALL') return;
                 
                 const url = new URL(window.location.href);
-                // 清除其他可能的參數，只保留必要的 (視需求而定，這裡保留 editor)
+                // 設為目前選到的剪輯師
                 url.searchParams.set('editor', filterEditor.value);
                 
                 navigator.clipboard.writeText(url.toString())
                     .then(() => showToast(`已複製 ${filterEditor.value} 的專屬連結`))
                     .catch(() => showToast('複製失敗', 'error'));
+            };
+
+            // 解除鎖定 (回到管理員模式)
+            const unlockEditor = () => {
+                isEditorLocked.value = false;
+                filterEditor.value = 'ALL';
+                // 清除網址參數，避免刷新後又鎖定 (視覺上清除)
+                const url = new URL(window.location.href);
+                url.searchParams.delete('editor');
+                window.history.pushState({}, '', url);
             };
 
             const fetchData = async () => {
@@ -460,7 +485,7 @@
                             updates: {
                                 status: task.status,
                                 finalLink: task.finalLink,
-                                notes: task.notes // 傳送備註
+                                notes: task.notes 
                             }
                         })
                     });
@@ -495,9 +520,9 @@
 
             return {
                 tasks, loading, error, searchText, 
-                filterStatus, filterClient, filterEditor, viewMode, 
+                filterStatus, filterClient, filterEditor, isEditorLocked, viewMode, 
                 toasts, uniqueClients, uniqueEditors, filteredTasks,
-                fetchData, updateTask, statusClass, isValidUrl, copyEditorLink
+                fetchData, updateTask, statusClass, isValidUrl, copyEditorLink, unlockEditor
             };
         }
     }).mount('#app');
