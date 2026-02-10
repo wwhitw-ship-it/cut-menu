@@ -5,158 +5,165 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>剪輯師任務看板</title>
-    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Vue.js -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- 引入圖標 -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
     <style>
-      body { background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+      body { background-color: #f3f4f6; font-family: 'Microsoft JhengHei', sans-serif; }
       .card { transition: all 0.3s ease; }
-      .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-      .loader { border-top-color: #3B82F6; animation: spinner 1.5s linear infinite; }
+      .card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+      .loader { border-top-color: #3B82F6; animation: spinner 1s linear infinite; }
       @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       [v-cloak] { display: none; }
-      
-      /* 除錯區樣式 */
-      .debug-area { background: #1f2937; color: #10b981; font-family: monospace; padding: 1rem; border-radius: 0.5rem; margin-top: 2rem; font-size: 0.8rem; overflow-x: auto; }
+      .debug-box { background: #2d3748; color: #48bb78; font-family: monospace; padding: 10px; border-radius: 5px; margin-top: 20px; font-size: 12px; overflow-x: auto; }
     </style>
   </head>
   <body>
-    <div id="app" class="max-w-5xl mx-auto p-4 min-h-screen" v-cloak>
+    <div id="app" class="max-w-6xl mx-auto p-4 min-h-screen" v-cloak>
       
-      <!-- 標題區 -->
-      <div class="flex justify-between items-center mb-6">
+      <!-- 標題列 -->
+      <div class="flex justify-between items-center mb-6 bg-white p-4 rounded shadow-sm">
         <h1 class="text-2xl font-bold text-gray-800 flex items-center">
-          <i class="fa-solid fa-film text-blue-600 mr-2"></i> 剪輯任務看板
+          <i class="fa-solid fa-clapperboard text-blue-600 mr-3"></i> 剪輯任務看板
         </h1>
-        <button @click="fetchData" class="text-sm bg-white border border-gray-300 px-3 py-1 rounded hover:bg-gray-50">
-          <i class="fa-solid fa-rotate-right mr-1"></i> 重新整理
+        <button @click="retryFetch(0)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded transition flex items-center text-sm font-medium">
+          <i class="fa-solid fa-rotate-right mr-2"></i> 重新整理
         </button>
       </div>
 
-      <!-- 錯誤訊息顯示 -->
-      <div v-if="errorMessage" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm">
-        <p class="font-bold"><i class="fa-solid fa-circle-exclamation mr-2"></i> 發生錯誤</p>
-        <p>{{ errorMessage }}</p>
-        <p class="text-xs mt-2 text-red-800 opacity-75">請截圖此畫面並檢查後端 Code.gs 設定。</p>
+      <!-- 狀態顯示區 -->
+      <div v-if="loading" class="text-center py-12">
+        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto mb-4"></div>
+        <p class="text-gray-500 font-medium">{{ loadingText }}</p>
       </div>
 
-      <!-- 讀取中動畫 -->
-      <div v-if="loading" class="flex flex-col justify-center items-center py-20">
-        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
-        <p class="text-gray-500">正在連接 Google Sheets...</p>
-      </div>
-
-      <!-- 主要內容區 -->
-      <div v-else>
-        
-        <!-- 篩選器 -->
-        <div class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-wrap gap-4 items-center">
-          <div class="flex items-center">
-            <i class="fa-solid fa-filter text-gray-400 mr-2"></i>
-            <span class="font-medium text-gray-700 mr-2">篩選:</span>
+      <div v-else-if="errorMessage" class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+        <div class="flex items-start">
+          <i class="fa-solid fa-triangle-exclamation text-red-500 mt-1 mr-3"></i>
+          <div>
+            <h3 class="font-bold text-red-800">讀取失敗</h3>
+            <p class="text-red-700 text-sm mt-1">{{ errorMessage }}</p>
+            <p class="text-red-600 text-xs mt-2">請截圖此畫面給管理員。</p>
           </div>
+        </div>
+      </div>
+
+      <!-- 主要內容 -->
+      <div v-else>
+        <!-- 篩選工具 -->
+        <div class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-wrap gap-4 items-center border border-gray-100">
+          <div class="flex items-center text-gray-600 font-bold"><i class="fa-solid fa-filter mr-2"></i> 篩選</div>
           
-          <select v-model="filterEditor" class="border border-gray-300 rounded px-3 py-1.5 focus:outline-none text-sm">
+          <select v-model="filterEditor" class="border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-200 outline-none">
             <option value="">所有剪輯師</option>
             <option v-for="editor in uniqueEditors" :key="editor" :value="editor">{{ editor }}</option>
           </select>
 
-          <select v-model="filterStatus" class="border border-gray-300 rounded px-3 py-1.5 focus:outline-none text-sm">
+          <select v-model="filterStatus" class="border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-200 outline-none">
             <option value="">所有狀態</option>
-            <option value="待剪輯">待剪輯</option>
+            <option value="腳本中">腳本中</option>
             <option value="剪輯中">剪輯中</option>
-            <option value="待審核">待審核</option>
-            <option value="修改中">修改中</option>
-            <option value="已完稿">已完稿</option>
+            <option value="已完成">已完成</option>
           </select>
 
-          <div class="ml-auto text-sm text-gray-500">
-            共 {{ filteredTasks.length }} 筆資料
+          <div class="ml-auto text-sm text-gray-500 font-medium bg-gray-100 px-3 py-1 rounded-full">
+            共 {{ filteredTasks.length }} 筆任務
           </div>
         </div>
 
-        <!-- 任務列表 -->
+        <!-- 卡片列表 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div v-for="task in filteredTasks" :key="task.rowIndex" class="card bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col">
             
-            <div class="h-1.5 w-full" :class="getStatusColor(task.status)"></div>
+            <!-- 頂部顏色條 -->
+            <div class="h-2 w-full" :class="getStatusColor(task.status)"></div>
 
             <div class="p-5 flex-1">
+              <!-- Header: 狀態與編號 -->
               <div class="flex justify-between items-start mb-3">
                 <div>
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600 mb-1">
-                    {{ task.projectId }} <span v-if="task.videoId">- {{ task.videoId }}</span>
-                  </span>
-                  <h3 class="text-lg font-bold text-gray-800 leading-tight">{{ task.topic || '(無主題)' }}</h3>
-                  <div class="text-sm text-gray-500 mt-1">{{ task.client }} | {{ task.field }}</div>
+                   <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800 mb-1">
+                     {{ task.projectId }} <span v-if="task.videoId" class="mx-1">/</span> {{ task.videoId }}
+                   </span>
+                   <div class="text-xs text-gray-500 mt-0.5">
+                     <span class="font-bold text-gray-600">{{ task.client }}</span> - {{ task.title }}
+                   </div>
                 </div>
                 <span class="px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm" :class="getStatusColor(task.status)">
                   {{ task.status }}
                 </span>
               </div>
 
-              <div class="flex items-center mb-4 text-sm text-gray-600">
-                 <i class="fa-solid fa-user-pen mr-2 text-gray-400"></i>
-                 <span>剪輯師: <span class="font-bold text-gray-800">{{ task.editor || '未指派' }}</span></span>
+              <!-- 主標題 -->
+              <h3 class="text-lg font-bold text-gray-800 leading-snug mb-2">{{ task.topic || '(未設定主題)' }}</h3>
+              
+              <!-- 領域與剪輯師 -->
+              <div class="flex items-center text-sm text-gray-600 mb-4 space-x-4">
+                <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs"><i class="fa-solid fa-layer-group mr-1"></i> {{ task.field }}</span>
+                <span><i class="fa-solid fa-user-pen mr-1 text-gray-400"></i> {{ task.editor || '未指派' }}</span>
               </div>
 
               <hr class="border-gray-100 my-3">
 
-              <!-- 摺疊區 -->
-              <div class="space-y-3">
-                <details class="group">
-                  <summary class="flex justify-between items-center font-medium cursor-pointer list-none text-sm text-blue-600 hover:text-blue-800">
-                    <span><i class="fa-solid fa-list-check mr-1"></i> 查看重點與大綱</span>
-                    <span class="transition group-open:rotate-180"><i class="fa-solid fa-chevron-down"></i></span>
+              <!-- 詳細內容摺疊 -->
+              <div class="space-y-2">
+                <details class="group bg-gray-50 rounded border border-gray-200">
+                  <summary class="flex justify-between items-center p-2.5 cursor-pointer text-sm font-medium text-gray-700 hover:text-blue-600 list-none">
+                    <span><i class="fa-solid fa-file-lines mr-2 text-blue-500"></i> 查看重點與大綱</span>
+                    <span class="transition-transform group-open:rotate-180 text-gray-400"><i class="fa-solid fa-chevron-down"></i></span>
                   </summary>
-                  <div class="text-gray-600 mt-2 text-sm bg-gray-50 p-3 rounded leading-relaxed whitespace-pre-line">
-                    <strong>重點說明：</strong>{{ task.keyPoints || '無' }}
-                    <div class="my-2 border-t border-gray-200"></div>
-                    <strong>腳本大綱：</strong>{{ task.outline || '無' }}
+                  <div class="p-3 pt-0 text-sm text-gray-600 border-t border-gray-200 mt-2 leading-relaxed whitespace-pre-line">
+                    <div class="mb-2">
+                      <span class="font-bold text-gray-800 block mb-1">📌 重點說明：</span>
+                      {{ task.keyPoints || '無' }}
+                    </div>
+                    <div>
+                      <span class="font-bold text-gray-800 block mb-1">📝 腳本大綱：</span>
+                      {{ task.outline || '無' }}
+                    </div>
                   </div>
                 </details>
               </div>
-              
+
+              <!-- 素材連結 -->
               <div class="mt-4">
-                 <a v-if="task.rawMaterial" :href="task.rawMaterial" target="_blank" class="flex items-center justify-center w-full py-2 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 transition text-sm font-medium">
-                   <i class="fa-brands fa-google-drive mr-2"></i> 開啟原始素材
-                 </a>
-                 <div v-else class="text-center py-2 text-gray-400 text-sm bg-gray-50 rounded border border-gray-200">
-                   無素材連結
-                 </div>
+                <a v-if="task.rawMaterial" :href="task.rawMaterial" target="_blank" class="flex items-center justify-center w-full py-2 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 transition text-sm font-medium">
+                  <i class="fa-brands fa-google-drive mr-2"></i> 開啟原始素材
+                </a>
+                <div v-else class="text-center py-2 text-gray-400 text-sm bg-gray-50 rounded border border-gray-100 cursor-not-allowed">
+                  <i class="fa-solid fa-link-slash mr-1"></i> 無素材連結
+                </div>
               </div>
             </div>
 
-            <!-- 操作區 -->
+            <!-- 底部操作區 -->
             <div class="bg-gray-50 p-4 border-t border-gray-200">
-              <div class="grid grid-cols-1 gap-3">
+              <div class="space-y-3">
+                
+                <!-- 狀態更新 -->
                 <div class="flex items-center space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16">更新狀態</label>
-                  <select v-model="task.tempStatus" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1">
-                    <option value="待剪輯">待剪輯</option>
+                  <label class="text-xs font-bold text-gray-500 w-16">狀態</label>
+                  <select v-model="task.tempStatus" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                    <option value="腳本中">腳本中</option>
                     <option value="剪輯中">剪輯中</option>
-                    <option value="待審核">待審核</option>
-                    <option value="修改中">修改中</option>
-                    <option value="已完稿">已完稿</option>
+                    <option value="已完成">已完成</option>
                   </select>
                 </div>
 
+                <!-- 備註 -->
                 <div class="flex items-start space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16 mt-1">備註</label>
-                  <textarea v-model="task.tempNotes" rows="1" class="flex-1 text-sm border-gray-300 rounded shadow-sm p-1 w-full"></textarea>
+                  <label class="text-xs font-bold text-gray-500 w-16 mt-2">備註</label>
+                  <textarea v-model="task.tempNotes" rows="1" class="flex-1 text-sm border-gray-300 rounded shadow-sm p-1.5 w-full focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="輸入備註..."></textarea>
                 </div>
 
+                <!-- 完成連結 -->
                 <div class="flex items-center space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16">連結</label>
-                  <input type="text" v-model="task.tempFinalLink" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1 px-2" placeholder="成品連結">
+                  <label class="text-xs font-bold text-gray-500 w-16">成品</label>
+                  <input type="text" v-model="task.tempFinalLink" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1.5 px-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="貼上成品連結">
                 </div>
                 
-                <button @click="updateTask(task)" :disabled="task.updating" class="w-full mt-2 bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded transition flex justify-center items-center">
-                  <span v-if="task.updating"><i class="fa-solid fa-spinner fa-spin mr-2"></i></span>
+                <button @click="updateTask(task)" :disabled="task.updating" class="w-full mt-1 bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded transition flex justify-center items-center">
+                  <span v-if="task.updating"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 儲存中...</span>
                   <span v-else>更新進度</span>
                 </button>
               </div>
@@ -164,23 +171,21 @@
 
           </div>
         </div>
-        
-        <!-- 空狀態 -->
-        <div v-if="filteredTasks.length === 0" class="text-center py-10 text-gray-500">
-          <i class="fa-regular fa-folder-open text-4xl mb-3"></i>
-          <p>目前沒有資料</p>
-          <p class="text-xs mt-2 text-gray-400">請檢查下方的「除錯資訊」確認原因。</p>
+
+        <!-- 無資料提示 -->
+        <div v-if="filteredTasks.length === 0" class="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300 mt-6">
+          <i class="fa-regular fa-folder-open text-4xl text-gray-300 mb-3"></i>
+          <p class="text-gray-500">沒有符合條件的任務</p>
         </div>
 
-        <!-- ★除錯資訊區 (讓您知道後端到底傳了什麼回來) -->
-        <div class="mt-8 border-t pt-4">
-          <button @click="showDebug = !showDebug" class="text-xs text-gray-500 underline mb-2">
-            {{ showDebug ? '隱藏除錯資訊' : '顯示除錯資訊 (如果是空白請點此)' }}
+        <!-- 除錯資訊開關 -->
+        <div class="mt-10 pt-4 border-t border-gray-200 text-center">
+          <button @click="showDebug = !showDebug" class="text-xs text-gray-400 hover:text-gray-600 underline">
+            {{ showDebug ? '隱藏技術資訊' : '顯示技術資訊 (無法連線時使用)' }}
           </button>
-          <div v-if="showDebug" class="debug-area">
-            <p><strong>Vue 狀態:</strong> {{ errorMessage ? '有錯誤' : '正常' }}</p>
-            <p><strong>連線狀態:</strong> {{ connectionStatus }}</p>
-            <p><strong>原始資料 (Raw JSON):</strong></p>
+          <div v-if="showDebug" class="debug-box text-left">
+            <p>連線狀態: {{ connectionStatus }}</p>
+            <p>原始回傳資料:</p>
             <pre>{{ debugData }}</pre>
           </div>
         </div>
@@ -194,70 +199,86 @@
       createApp({
         setup() {
           const tasks = ref([]);
-          const loading = ref(false);
+          const loading = ref(true);
+          const loadingText = ref('正在連接資料庫...');
           const errorMessage = ref('');
-          const showDebug = ref(false);
-          const debugData = ref('等待資料中...');
-          const connectionStatus = ref('尚未連線');
           
+          // 除錯用變數
+          const showDebug = ref(false);
+          const debugData = ref('無資料');
+          const connectionStatus = ref('初始化...');
+
+          // 篩選變數
           const filterEditor = ref('');
           const filterStatus = ref('');
 
-          // 載入資料主程式
-          const fetchData = () => {
+          // 抓取資料 (含自動重試)
+          const retryFetch = (count = 0) => {
             loading.value = true;
             errorMessage.value = '';
-            connectionStatus.value = '正在呼叫 Google Apps Script...';
-
-            // 檢查是否為部署環境
-            if (typeof google === 'undefined' || !google.script) {
-               loading.value = false;
-               errorMessage.value = '偵測不到 Google Apps Script 環境。請務必使用「部署網址」開啟，預覽模式下無法連接真實資料庫。';
-               connectionStatus.value = '連線失敗 (非 GAS 環境)';
-               return;
+            
+            if (count === 0) {
+              loadingText.value = '正在連接 Google Sheets...';
+              connectionStatus.value = '嘗試連線中...';
+            } else {
+              loadingText.value = `連線中... (第 ${count} 次嘗試)`;
+              connectionStatus.value = `重試第 ${count} 次...`;
             }
 
+            // 檢查 Google 環境
+            if (typeof google === 'undefined' || !google.script) {
+              if (count < 5) {
+                console.log('尚未找到 Google 物件，0.5秒後重試...');
+                setTimeout(() => retryFetch(count + 1), 500);
+              } else {
+                loading.value = false;
+                errorMessage.value = '連線逾時：無法連接到 Google 伺服器。請確認您是使用「部署網址」開啟，而非預覽模式。';
+                connectionStatus.value = '失敗 (找不到 google.script)';
+                debugData.value = 'Error: Google script object missing.';
+              }
+              return;
+            }
+
+            // 執行後端函數
             google.script.run
               .withSuccessHandler((data) => {
                 loading.value = false;
-                connectionStatus.value = '連線成功！';
-                debugData.value = JSON.stringify(data, null, 2); // 將資料顯示在除錯區
+                connectionStatus.value = '連線成功';
+                debugData.value = JSON.stringify(data, null, 2);
                 
-                if (!data || data.length === 0) {
-                   tasks.value = [];
-                   // 如果是空陣列，這裡會保持 tasks 為空，畫面顯示「目前沒有資料」
+                if (Array.isArray(data)) {
+                  tasks.value = data.map(t => ({
+                    ...t,
+                    tempStatus: t.status,
+                    tempNotes: t.notes,
+                    tempFinalLink: t.finalLink,
+                    updating: false
+                  }));
                 } else {
-                   tasks.value = data.map(t => ({
-                     ...t,
-                     tempStatus: t.status,
-                     tempNotes: t.notes,
-                     tempFinalLink: t.finalLink,
-                     updating: false
-                   }));
+                  tasks.value = [];
                 }
               })
               .withFailureHandler((error) => {
                 loading.value = false;
-                errorMessage.value = '後端錯誤: ' + error.message;
-                connectionStatus.value = '連線發生錯誤';
-                debugData.value = '錯誤: ' + error.message;
+                errorMessage.value = error.message;
+                connectionStatus.value = '後端報錯';
+                debugData.value = error.message;
               })
               .getData();
           };
 
-          const uniqueEditors = computed(() => {
-            const editors = tasks.value.map(t => t.editor).filter(e => e);
-            return [...new Set(editors)];
-          });
-
+          // 計算篩選清單
+          const uniqueEditors = computed(() => [...new Set(tasks.value.map(t => t.editor).filter(e => e))]);
+          
           const filteredTasks = computed(() => {
-            return tasks.value.filter(task => {
-              const matchEditor = filterEditor.value ? task.editor === filterEditor.value : true;
-              const matchStatus = filterStatus.value ? task.status === filterStatus.value : true;
+            return tasks.value.filter(t => {
+              const matchEditor = filterEditor.value ? t.editor === filterEditor.value : true;
+              const matchStatus = filterStatus.value ? t.status === filterStatus.value : true;
               return matchEditor && matchStatus;
             });
           });
 
+          // 更新任務
           const updateTask = (task) => {
             task.updating = true;
             const updates = {
@@ -274,32 +295,32 @@
                 task.updating = false;
                 alert('更新成功！');
               })
-              .withFailureHandler((err) => {
-                alert('更新失敗: ' + err.message);
+              .withFailureHandler((error) => {
+                alert('更新失敗: ' + error.message);
                 task.updating = false;
               })
               .updateTask(task.rowIndex, updates);
           };
 
+          // 狀態顏色設定
           const getStatusColor = (status) => {
             const map = {
-              '待剪輯': 'bg-gray-400',
+              '腳本中': 'bg-gray-400',
               '剪輯中': 'bg-yellow-500',
-              '待審核': 'bg-blue-500',
-              '修改中': 'bg-orange-500',
-              '已完稿': 'bg-green-500'
+              '已完成': 'bg-green-500'
             };
-            return map[status] || 'bg-gray-400';
+            return map[status] || 'bg-gray-300';
           };
 
           onMounted(() => {
-            fetchData();
+            retryFetch(0);
           });
 
           return {
-            tasks, loading, errorMessage, showDebug, debugData, connectionStatus,
-            fetchData, filterEditor, filterStatus,
-            uniqueEditors, filteredTasks, updateTask, getStatusColor
+            tasks, loading, loadingText, errorMessage,
+            showDebug, debugData, connectionStatus,
+            filterEditor, filterStatus, uniqueEditors, filteredTasks,
+            retryFetch, updateTask, getStatusColor
           };
         }
       }).mount('#app');
