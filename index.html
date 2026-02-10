@@ -26,7 +26,7 @@
         <h1 class="text-2xl font-bold text-gray-800 flex items-center">
           <i class="fa-solid fa-clapperboard text-blue-600 mr-3"></i> 剪輯任務看板
         </h1>
-        <button @click="retryFetch(0)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded transition flex items-center text-sm font-medium">
+        <button @click="startFetch(true)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded transition flex items-center text-sm font-medium">
           <i class="fa-solid fa-rotate-right mr-2"></i> 重新整理
         </button>
       </div>
@@ -35,15 +35,28 @@
       <div v-if="loading" class="text-center py-12">
         <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto mb-4"></div>
         <p class="text-gray-500 font-medium">{{ loadingText }}</p>
+        <p class="text-gray-400 text-xs mt-2">請稍候，正在等待 Google 服務回應...</p>
       </div>
 
-      <div v-else-if="errorMessage" class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+      <div v-else-if="errorMessage" class="bg-red-50 border-l-4 border-red-500 p-6 mb-6 rounded shadow-sm">
         <div class="flex items-start">
-          <i class="fa-solid fa-triangle-exclamation text-red-500 mt-1 mr-3"></i>
-          <div>
-            <h3 class="font-bold text-red-800">讀取失敗</h3>
-            <p class="text-red-700 text-sm mt-1">{{ errorMessage }}</p>
-            <p class="text-red-600 text-xs mt-2">請截圖此畫面給管理員。</p>
+          <i class="fa-solid fa-triangle-exclamation text-red-500 mt-1 mr-3 text-xl"></i>
+          <div class="flex-1">
+            <h3 class="font-bold text-red-800 text-lg">連線發生問題</h3>
+            <p class="text-red-700 mt-2">{{ errorMessage }}</p>
+            
+            <div class="mt-4 p-4 bg-white rounded border border-red-100">
+              <p class="text-gray-700 font-bold mb-2">建議解決方法：</p>
+              <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <li>請嘗試按一下下方的「強制連線」按鈕。</li>
+                <li>請確認您是使用<strong>無痕視窗</strong>開啟 (避免擴充功能阻擋)。</li>
+                <li>請確認您的 Google 帳號已登入，且沒有同時登入多個帳號造成衝突。</li>
+              </ul>
+            </div>
+
+            <button @click="forceConnection" class="mt-4 bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700 transition font-bold shadow-sm">
+              <i class="fa-solid fa-bolt mr-2"></i> 嘗試強制連線
+            </button>
           </div>
         </div>
       </div>
@@ -185,6 +198,7 @@
           </button>
           <div v-if="showDebug" class="debug-box text-left">
             <p>連線狀態: {{ connectionStatus }}</p>
+            <p>Google 物件狀態: {{ googleObjStatus }}</p>
             <p>原始回傳資料:</p>
             <pre>{{ debugData }}</pre>
           </div>
@@ -200,47 +214,36 @@
         setup() {
           const tasks = ref([]);
           const loading = ref(true);
-          const loadingText = ref('正在連接資料庫...');
+          const loadingText = ref('初始化中...');
           const errorMessage = ref('');
           
-          // 除錯用變數
+          // 除錯用
           const showDebug = ref(false);
           const debugData = ref('無資料');
           const connectionStatus = ref('初始化...');
+          const googleObjStatus = ref('檢查中...');
 
           // 篩選變數
           const filterEditor = ref('');
           const filterStatus = ref('');
 
-          // 抓取資料 (含自動重試)
-          const retryFetch = (count = 0) => {
-            loading.value = true;
-            errorMessage.value = '';
-            
-            if (count === 0) {
-              loadingText.value = '正在連接 Google Sheets...';
-              connectionStatus.value = '嘗試連線中...';
-            } else {
-              loadingText.value = `連線中... (第 ${count} 次嘗試)`;
-              connectionStatus.value = `重試第 ${count} 次...`;
-            }
+          // 強制連線 (不檢查，直接嘗試執行)
+          const forceConnection = () => {
+             loading.value = true;
+             loadingText.value = '正在強制連線...';
+             errorMessage.value = '';
+             connectionStatus.value = '強制連線中...';
+             
+             try {
+               executeGoogleScript();
+             } catch (e) {
+               handleError(e);
+             }
+          };
 
-            // 檢查 Google 環境
-            if (typeof google === 'undefined' || !google.script) {
-              if (count < 5) {
-                console.log('尚未找到 Google 物件，0.5秒後重試...');
-                setTimeout(() => retryFetch(count + 1), 500);
-              } else {
-                loading.value = false;
-                errorMessage.value = '連線逾時：無法連接到 Google 伺服器。請確認您是使用「部署網址」開啟，而非預覽模式。';
-                connectionStatus.value = '失敗 (找不到 google.script)';
-                debugData.value = 'Error: Google script object missing.';
-              }
-              return;
-            }
-
-            // 執行後端函數
-            google.script.run
+          // 執行 Google Script 後端
+          const executeGoogleScript = () => {
+             google.script.run
               .withSuccessHandler((data) => {
                 loading.value = false;
                 connectionStatus.value = '連線成功';
@@ -258,16 +261,48 @@
                   tasks.value = [];
                 }
               })
-              .withFailureHandler((error) => {
-                loading.value = false;
-                errorMessage.value = error.message;
-                connectionStatus.value = '後端報錯';
-                debugData.value = error.message;
-              })
+              .withFailureHandler(handleError)
               .getData();
           };
 
-          // 計算篩選清單
+          const handleError = (error) => {
+            loading.value = false;
+            errorMessage.value = error.message || '未知錯誤';
+            connectionStatus.value = '錯誤';
+            debugData.value = error.toString();
+          };
+
+          // 啟動抓取 (含重試邏輯)
+          const startFetch = (isRetry = false) => {
+            loading.value = true;
+            errorMessage.value = '';
+            
+            // 嘗試連線
+            let attempts = 0;
+            const maxAttempts = 10; // 嘗試 10 次 (約 10 秒)
+
+            const checkGoogle = setInterval(() => {
+              attempts++;
+              loadingText.value = `正在連接 Google 伺服器... (${attempts}/${maxAttempts})`;
+              
+              const isGoogleReady = typeof google !== 'undefined' && google.script;
+              googleObjStatus.value = isGoogleReady ? '已就緒' : `未就緒 (嘗試 ${attempts})`;
+
+              if (isGoogleReady) {
+                clearInterval(checkGoogle);
+                connectionStatus.value = 'Google 物件已找到，開始讀取...';
+                executeGoogleScript();
+              } else if (attempts >= maxAttempts) {
+                clearInterval(checkGoogle);
+                loading.value = false;
+                errorMessage.value = '連線逾時。您的瀏覽器似乎無法載入 Google 腳本元件。';
+                connectionStatus.value = '連線失敗 (Timeout)';
+                // 就算失敗，也顯示按鈕讓使用者可以手動再試
+              }
+            }, 1000); // 每 1 秒檢查一次
+          };
+
+          // 計算篩選
           const uniqueEditors = computed(() => [...new Set(tasks.value.map(t => t.editor).filter(e => e))]);
           
           const filteredTasks = computed(() => {
@@ -281,6 +316,14 @@
           // 更新任務
           const updateTask = (task) => {
             task.updating = true;
+            
+            // 簡單檢查
+            if (typeof google === 'undefined' || !google.script) {
+               alert('連線已斷開，請重新整理網頁。');
+               task.updating = false;
+               return;
+            }
+
             const updates = {
               status: task.tempStatus,
               notes: task.tempNotes,
@@ -302,7 +345,6 @@
               .updateTask(task.rowIndex, updates);
           };
 
-          // 狀態顏色設定
           const getStatusColor = (status) => {
             const map = {
               '腳本中': 'bg-gray-400',
@@ -313,14 +355,16 @@
           };
 
           onMounted(() => {
-            retryFetch(0);
+            // 延遲一點點啟動，確保 DOM 已載入
+            setTimeout(() => startFetch(), 500);
           });
 
           return {
             tasks, loading, loadingText, errorMessage,
-            showDebug, debugData, connectionStatus,
+            showDebug, debugData, connectionStatus, googleObjStatus,
+            startFetch, forceConnection,
             filterEditor, filterStatus, uniqueEditors, filteredTasks,
-            retryFetch, updateTask, getStatusColor
+            updateTask, getStatusColor
           };
         }
       }).mount('#app');
