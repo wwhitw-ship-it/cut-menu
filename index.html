@@ -5,56 +5,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>剪輯師任務看板</title>
-    <!-- 引入 Tailwind CSS 讓介面變漂亮 -->
+    <!-- 引入美化工具與框架 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Vue.js 讓操作更流暢 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- 引入圖標庫 -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
     <style>
-      body { background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-      .card { transition: all 0.3s ease; }
-      .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-      .loader { border-top-color: #3B82F6; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
-      @-webkit-keyframes spinner { 0% { -webkit-transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); } }
+      body { background-color: #f3f4f6; font-family: sans-serif; }
+      .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+      .loader { border-top-color: #3B82F6; animation: spinner 1.5s linear infinite; }
       @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
     <div id="app" class="max-w-5xl mx-auto p-4 min-h-screen">
       
-      <!-- 標題區 -->
+      <!-- 預覽模式警告 (只在未部署時顯示) -->
+      <div v-if="isPreviewMode" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded">
+        <p class="font-bold"><i class="fa-solid fa-triangle-exclamation mr-2"></i> 預覽模式</p>
+        <p class="text-sm">您目前看到的是模擬資料。請部署後查看真實資料。</p>
+      </div>
+
+      <!-- 標題 -->
       <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
-          <i class="fa-solid fa-film text-blue-600 mr-2"></i> 剪輯任務看板
-          <span v-if="isMockMode" class="ml-2 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">預覽測試模式</span>
-        </h1>
-        <button @click="fetchData" class="text-sm bg-white border border-gray-300 px-3 py-1 rounded hover:bg-gray-50">
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-film text-blue-600 mr-2"></i> 剪輯任務看板</h1>
+        <button @click="fetchData" class="text-sm bg-white border px-3 py-1 rounded hover:bg-gray-50">
           <i class="fa-solid fa-rotate-right mr-1"></i> 重新整理
         </button>
       </div>
 
-      <!-- 讀取中畫面 -->
+      <!-- 讀取中 -->
       <div v-if="loading" class="flex justify-center items-center py-20">
-        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
       </div>
 
-      <!-- 主要內容區 -->
+      <!-- 內容 -->
       <div v-else>
         <!-- 篩選器 -->
-        <div class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-wrap gap-4 items-center">
-          <div class="flex items-center">
-            <i class="fa-solid fa-filter text-gray-400 mr-2"></i>
-            <span class="font-medium text-gray-700 mr-2">篩選:</span>
-          </div>
-          
-          <select v-model="filterEditor" class="border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 text-sm">
+        <div class="bg-white p-4 rounded shadow-sm mb-6 flex flex-wrap gap-4 items-center">
+          <div class="flex items-center text-gray-700 font-bold"><i class="fa-solid fa-filter mr-2"></i>篩選:</div>
+          <select v-model="filterEditor" class="border rounded px-2 py-1">
             <option value="">所有剪輯師</option>
             <option v-for="editor in uniqueEditors" :key="editor" :value="editor">{{ editor }}</option>
           </select>
-
-          <select v-model="filterStatus" class="border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 text-sm">
+          <select v-model="filterStatus" class="border rounded px-2 py-1">
             <option value="">所有狀態</option>
             <option value="待剪輯">待剪輯</option>
             <option value="剪輯中">剪輯中</option>
@@ -62,81 +55,53 @@
             <option value="修改中">修改中</option>
             <option value="已完稿">已完稿</option>
           </select>
-
-          <div class="ml-auto text-sm text-gray-500">
-            共 {{ filteredTasks.length }} 個任務
-          </div>
+          <div class="ml-auto text-sm text-gray-500">共 {{ filteredTasks.length }} 筆</div>
         </div>
 
-        <!-- 任務卡片列表 -->
+        <!-- 任務列表 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div v-for="task in filteredTasks" :key="task.rowIndex" class="card bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col">
-            
-            <!-- 卡片頂部狀態條 -->
+          <div v-for="task in filteredTasks" :key="task.rowIndex" class="card bg-white rounded shadow border overflow-hidden flex flex-col transition-all duration-300">
+            <!-- 狀態條 -->
             <div class="h-1.5 w-full" :class="getStatusColor(task.status)"></div>
-
+            
             <div class="p-5 flex-1">
-              <!-- 標題與標籤 -->
               <div class="flex justify-between items-start mb-3">
                 <div>
-                  <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600 mb-1">
-                    {{ task.projectId }} - {{ task.videoId }}
-                  </span>
-                  <h3 class="text-lg font-bold text-gray-800 leading-tight">{{ task.topic }}</h3>
-                  <div class="text-sm text-gray-500 mt-1">{{ task.client }} | {{ task.field }}</div>
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600 mb-1">{{ task.projectId }}</span>
+                  <h3 class="text-lg font-bold text-gray-800">{{ task.topic }}</h3>
+                  <div class="text-sm text-gray-500">{{ task.client }} | {{ task.field }}</div>
                 </div>
-                <!-- 狀態標籤 -->
-                <span class="px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm" :class="getStatusColor(task.status)">
-                  {{ task.status }}
-                </span>
-              </div>
-
-              <!-- 剪輯師顯示 -->
-              <div class="flex items-center mb-4 text-sm text-gray-600">
-                 <i class="fa-solid fa-user-pen mr-2 text-gray-400"></i>
-                 <span>剪輯師: <span class="font-medium text-gray-800">{{ task.editor || '未指派' }}</span></span>
-              </div>
-
-              <hr class="border-gray-100 my-3">
-
-              <!-- 重點與大綱 (摺疊式) -->
-              <div class="space-y-3">
-                <details class="group">
-                  <summary class="flex justify-between items-center font-medium cursor-pointer list-none text-sm text-blue-600 hover:text-blue-800">
-                    <span><i class="fa-solid fa-list-check mr-1"></i> 查看重點與大綱</span>
-                    <span class="transition group-open:rotate-180">
-                      <i class="fa-solid fa-chevron-down"></i>
-                    </span>
-                  </summary>
-                  <div class="text-gray-600 mt-2 text-sm bg-gray-50 p-3 rounded leading-relaxed whitespace-pre-line">
-                    <strong>重點說明：</strong>
-                    {{ task.keyPoints || '無' }}
-                    <div class="my-2 border-t border-gray-200"></div>
-                    <strong>腳本大綱：</strong>
-                    {{ task.outline || '無' }}
-                  </div>
-                </details>
+                <span class="px-3 py-1 rounded-full text-xs font-bold text-white" :class="getStatusColor(task.status)">{{ task.status }}</span>
               </div>
               
-              <div class="mt-4">
-                 <a v-if="task.rawMaterial" :href="task.rawMaterial" target="_blank" class="flex items-center justify-center w-full py-2 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 transition text-sm font-medium">
-                   <i class="fa-brands fa-google-drive mr-2"></i> 開啟原始素材資料夾
-                 </a>
-                 <div v-else class="text-center py-2 text-gray-400 text-sm bg-gray-50 rounded border border-gray-200">
-                   無素材連結
-                 </div>
-              </div>
+              <div class="text-sm text-gray-600 mb-4"><i class="fa-solid fa-user-pen mr-2"></i>剪輯師: <b>{{ task.editor || '未指派' }}</b></div>
+              <hr class="border-gray-100 my-3">
+              
+              <!-- 摺疊內容 -->
+              <details class="group mb-4">
+                <summary class="flex items-center text-blue-600 cursor-pointer text-sm font-medium hover:text-blue-800 list-none">
+                  <span><i class="fa-solid fa-list-check mr-1"></i> 重點與大綱</span>
+                  <span class="ml-auto transition group-open:rotate-180"><i class="fa-solid fa-chevron-down"></i></span>
+                </summary>
+                <div class="text-gray-600 mt-2 text-sm bg-gray-50 p-3 rounded">
+                  <strong>重點：</strong>{{ task.keyPoints || '無' }}<br>
+                  <div class="border-t my-2"></div>
+                  <strong>大綱：</strong>{{ task.outline || '無' }}
+                </div>
+              </details>
 
+              <a v-if="task.rawMaterial" :href="task.rawMaterial" target="_blank" class="block text-center w-full py-2 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 text-sm font-medium">
+                <i class="fa-brands fa-google-drive mr-1"></i> 開啟素材
+              </a>
+              <div v-else class="text-center py-2 text-gray-400 text-sm bg-gray-50 rounded border">無素材連結</div>
             </div>
 
-            <!-- 編輯操作區 (底部) -->
-            <div class="bg-gray-50 p-4 border-t border-gray-200">
-              <div class="grid grid-cols-1 gap-3">
-                
-                <!-- 狀態更新 -->
-                <div class="flex items-center space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16">更新狀態</label>
-                  <select v-model="task.tempStatus" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1">
+            <!-- 編輯區 -->
+            <div class="bg-gray-50 p-4 border-t">
+              <div class="grid gap-3">
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-bold text-gray-500 w-14">狀態</label>
+                  <select v-model="task.tempStatus" class="flex-1 text-sm border rounded py-1">
                     <option value="待剪輯">待剪輯</option>
                     <option value="剪輯中">剪輯中</option>
                     <option value="待審核">待審核</option>
@@ -144,183 +109,81 @@
                     <option value="已完稿">已完稿</option>
                   </select>
                 </div>
-
-                <!-- 備註 -->
-                <div class="flex items-start space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16 mt-1">剪輯備註</label>
-                  <textarea v-model="task.tempNotes" rows="2" class="flex-1 text-sm border-gray-300 rounded shadow-sm p-2 w-full" placeholder="進度備註..."></textarea>
+                <div class="flex items-start gap-2">
+                  <label class="text-xs font-bold text-gray-500 w-14 mt-1">備註</label>
+                  <textarea v-model="task.tempNotes" rows="1" class="flex-1 text-sm border rounded p-1"></textarea>
                 </div>
-
-                <!-- 完成連結 -->
-                <div class="flex items-center space-x-2">
-                  <label class="text-xs font-bold text-gray-500 w-16">完成連結</label>
-                  <input type="text" v-model="task.tempFinalLink" class="flex-1 text-sm border-gray-300 rounded shadow-sm py-1 px-2" placeholder="Google Drive 連結">
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-bold text-gray-500 w-14">連結</label>
+                  <input type="text" v-model="task.tempFinalLink" class="flex-1 text-sm border rounded py-1 px-1" placeholder="成品連結">
                 </div>
-                
-                <button @click="updateTask(task)" :disabled="task.updating" class="w-full mt-2 bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded transition flex justify-center items-center">
-                  <span v-if="task.updating"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 更新中...</span>
-                  <span v-else>更新進度</span>
+                <button @click="updateTask(task)" :disabled="task.updating" class="w-full bg-gray-800 text-white py-2 rounded hover:bg-gray-900 transition flex justify-center text-sm font-medium">
+                   <span v-if="task.updating"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 更新中...</span>
+                   <span v-else>更新進度</span>
                 </button>
-
               </div>
             </div>
-
           </div>
         </div>
         
-        <!-- 空狀態 -->
         <div v-if="filteredTasks.length === 0" class="text-center py-10 text-gray-500">
-          <i class="fa-regular fa-folder-open text-4xl mb-3"></i>
-          <p>沒有符合條件的任務</p>
+           <i class="fa-regular fa-folder-open text-4xl mb-3"></i><p>沒有符合的任務</p>
         </div>
-
       </div>
     </div>
 
     <script>
       const { createApp, ref, computed, onMounted } = Vue;
-
       createApp({
         setup() {
           const tasks = ref([]);
           const loading = ref(true);
           const filterEditor = ref('');
           const filterStatus = ref('');
-          const isMockMode = ref(false);
+          const isPreviewMode = ref(false);
 
-          /**
-           * 初始化 Google Script Mock (針對預覽環境)
-           * 如果 window.google 不存在，代表我們在本地或預覽模式
-           */
-          const initGoogleMock = () => {
-            if (typeof google === 'undefined') {
-              console.warn('正在使用模擬資料模式 (Mock Mode)');
-              isMockMode.value = true;
-              window.google = {
-                script: {
-                  run: {
-                    withSuccessHandler: function(successCallback) {
-                      this.successCallback = successCallback;
-                      return this;
-                    },
-                    withFailureHandler: function(failureCallback) {
-                      this.failureCallback = failureCallback;
-                      return this;
-                    },
-                    getData: function() {
-                      // 模擬從 Google Sheets 傳回來的資料
-                      const mockData = [
-                        { rowIndex: 2, projectId: 'P001', client: 'A客戶', title: '李經理', videoId: 'V01', field: '科技', topic: 'AI趨勢分析 (預覽測試)', keyPoints: '重點在開頭30秒', outline: '1. 開場\n2. 介紹工具\n3. 結尾', status: '待剪輯', rawMaterial: 'https://drive.google.com', notes: '', editor: '小陳', finalLink: '' },
-                        { rowIndex: 3, projectId: 'P002', client: 'B客戶', title: '王總', videoId: 'V02', field: '美食', topic: '牛肉麵特輯 (預覽測試)', keyPoints: '強調湯頭特寫', outline: '1. 店面\n2. 煮麵過程\n3. 試吃', status: '剪輯中', rawMaterial: '', notes: '缺B-roll', editor: '小張', finalLink: '' },
-                         { rowIndex: 4, projectId: 'P003', client: 'C客戶', title: '林醫師', videoId: 'V03', field: '醫療', topic: '如何預防感冒', keyPoints: '語氣要專業', outline: '1. 定義\n2. 預防\n3. 治療', status: '待審核', rawMaterial: 'https://drive.google.com', notes: '已上傳初剪', editor: '小陳', finalLink: 'https://drive.google.com/file' }
-                      ];
-                      
-                      setTimeout(() => {
-                        if (this.successCallback) this.successCallback(mockData);
-                      }, 800);
-                    },
-                    updateTask: function(index, updates) {
-                      console.log('模擬更新:', index, updates);
-                      setTimeout(() => {
-                        if (this.successCallback) this.successCallback({ success: true, message: '更新成功 (模擬)' });
-                      }, 1000);
-                    }
-                  }
-                }
-              };
-            }
-          };
-
-          // 載入資料
           const fetchData = () => {
             loading.value = true;
-            // 確保 google 物件存在 (如果是在預覽環境)
-            initGoogleMock();
-
+            // 偵測是否在 GAS 環境
+            if (typeof google === 'undefined') {
+              isPreviewMode.value = true;
+              // 模擬資料 (給預覽用)
+              setTimeout(() => {
+                tasks.value = [{ rowIndex: 2, projectId: 'P-Demo', client: '預覽模式', title: '測試', videoId: 'V01', field: '測試', topic: '這是預覽資料，請部署以查看真實內容', keyPoints: '部署後會自動連接 Google Sheet', outline: '...', status: '待剪輯', rawMaterial: '', notes: '', editor: '測試員', finalLink: '' }]
+                  .map(t => ({ ...t, tempStatus: t.status, tempNotes: t.notes, tempFinalLink: t.finalLink, updating: false }));
+                loading.value = false;
+              }, 500);
+              return;
+            }
+            // 真實資料抓取
             google.script.run
               .withSuccessHandler((data) => {
-                // 將資料載入，並為每個任務加上暫存編輯欄位 (temp...)
-                tasks.value = data.map(t => ({
-                  ...t,
-                  tempStatus: t.status,
-                  tempNotes: t.notes,
-                  tempFinalLink: t.finalLink,
-                  updating: false
-                }));
+                tasks.value = data.map(t => ({ ...t, tempStatus: t.status, tempNotes: t.notes, tempFinalLink: t.finalLink, updating: false }));
                 loading.value = false;
               })
-              .withFailureHandler((error) => {
-                alert('讀取失敗: ' + error.message);
-                loading.value = false;
-              })
+              .withFailureHandler((error) => { alert('讀取失敗: ' + error.message); loading.value = false; })
               .getData();
           };
 
-          // 取得所有剪輯師名單 (去除重複)
-          const uniqueEditors = computed(() => {
-            const editors = tasks.value.map(t => t.editor).filter(e => e);
-            return [...new Set(editors)];
-          });
+          const uniqueEditors = computed(() => [...new Set(tasks.value.map(t => t.editor).filter(e => e))]);
+          const filteredTasks = computed(() => tasks.value.filter(t => (!filterEditor.value || t.editor === filterEditor.value) && (!filterStatus.value || t.status === filterStatus.value)));
+          const getStatusColor = (s) => ({ '待剪輯': 'bg-gray-400', '剪輯中': 'bg-yellow-500', '待審核': 'bg-blue-500', '修改中': 'bg-orange-500', '已完稿': 'bg-green-500' }[s] || 'bg-gray-400');
 
-          // 篩選邏輯
-          const filteredTasks = computed(() => {
-            return tasks.value.filter(task => {
-              const matchEditor = filterEditor.value ? task.editor === filterEditor.value : true;
-              const matchStatus = filterStatus.value ? task.status === filterStatus.value : true;
-              return matchEditor && matchStatus;
-            });
-          });
-
-          // 更新任務邏輯
           const updateTask = (task) => {
             task.updating = true;
-            const updates = {
-              status: task.tempStatus,
-              notes: task.tempNotes,
-              finalLink: task.tempFinalLink
-            };
-
-            // 確保 google 物件存在
-            initGoogleMock();
-
+            if (typeof google === 'undefined') {
+              setTimeout(() => { alert('預覽模式無法寫入資料'); task.updating = false; }, 500); return;
+            }
             google.script.run
-              .withSuccessHandler((res) => {
-                task.status = task.tempStatus;
-                task.notes = task.tempNotes;
-                task.finalLink = task.tempFinalLink;
-                task.updating = false;
-                // 使用非阻塞通知，避免 alert 卡住
-                console.log('Update Success'); 
-                if(!isMockMode.value) alert('更新成功！'); // 在真實環境才跳 alert
-                else alert('更新成功！(這是模擬模式，資料不會真的寫入 Sheet)');
+              .withSuccessHandler(() => {
+                task.status = task.tempStatus; task.notes = task.tempNotes; task.finalLink = task.tempFinalLink; task.updating = false; alert('更新成功！');
               })
-              .withFailureHandler((err) => {
-                alert('更新失敗: ' + err.message);
-                task.updating = false;
-              })
-              .updateTask(task.rowIndex, updates);
+              .withFailureHandler((e) => { alert('更新失敗: ' + e.message); task.updating = false; })
+              .updateTask(task.rowIndex, { status: task.tempStatus, notes: task.tempNotes, finalLink: task.tempFinalLink });
           };
 
-          // 狀態顏色輔助函數
-          const getStatusColor = (status) => {
-            const map = {
-              '待剪輯': 'bg-gray-400',
-              '剪輯中': 'bg-yellow-500',
-              '待審核': 'bg-blue-500',
-              '修改中': 'bg-orange-500',
-              '已完稿': 'bg-green-500'
-            };
-            return map[status] || 'bg-gray-400';
-          };
-
-          onMounted(() => {
-            fetchData();
-          });
-
-          return {
-            tasks, loading, fetchData, filterEditor, filterStatus,
-            uniqueEditors, filteredTasks, updateTask, getStatusColor, isMockMode
-          };
+          onMounted(fetchData);
+          return { tasks, loading, fetchData, filterEditor, filterStatus, uniqueEditors, filteredTasks, updateTask, getStatusColor, isPreviewMode };
         }
       }).mount('#app');
     </script>
