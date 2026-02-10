@@ -67,14 +67,11 @@
                         </button>
                     </div>
 
-                    <!-- 2. 鎖定模式 (有參數)：只顯示名字，不可切換 -->
-                    <div v-else class="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 shadow-sm">
-                        <i class="fa-solid fa-user-check"></i>
+                    <!-- 2. 鎖定模式 (有參數)：只顯示名字，完全不可切換 -->
+                    <div v-else class="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 shadow-sm select-none cursor-default">
+                        <i class="fa-solid fa-user-lock"></i>
                         <span class="text-sm font-bold">{{ filterEditor }}</span>
-                        <!-- 取消鎖定按鈕 (選用，回到總覽) -->
-                        <button @click="unlockEditor" class="ml-1 text-blue-400 hover:text-blue-600 rounded-full w-5 h-5 flex items-center justify-center transition" title="回到總覽 (管理員用)">
-                            <i class="fa-solid fa-xmark text-xs"></i>
-                        </button>
+                        <span class="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded ml-1">專屬檢視</span>
                     </div>
 
                     <!-- 客戶篩選 (自動生成) -->
@@ -420,11 +417,11 @@
                     .catch(() => showToast('複製失敗', 'error'));
             };
 
-            // 解除鎖定 (回到管理員模式)
+            // 解除鎖定 (回到管理員模式) - 雖然介面移除按鈕，保留邏輯以備不時之需
             const unlockEditor = () => {
                 isEditorLocked.value = false;
                 filterEditor.value = 'ALL';
-                // 清除網址參數，避免刷新後又鎖定 (視覺上清除)
+                // 清除網址參數
                 const url = new URL(window.location.href);
                 url.searchParams.delete('editor');
                 window.history.pushState({}, '', url);
