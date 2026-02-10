@@ -52,6 +52,12 @@
                             class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                     </div>
 
+                    <!-- 剪輯師篩選 (新增) -->
+                    <select v-model="filterEditor" class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-500 max-w-[130px]">
+                        <option value="ALL">所有剪輯師</option>
+                        <option v-for="editor in uniqueEditors" :key="editor" :value="editor">{{ editor }}</option>
+                    </select>
+
                     <!-- 客戶篩選 (自動生成) -->
                     <select v-model="filterClient" class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-500 max-w-[120px]">
                         <option value="ALL">所有客戶</option>
@@ -62,6 +68,7 @@
                     <select v-model="filterStatus" class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-500 max-w-[100px]">
                         <option value="ALL">所有進度</option>
                         <option value="腳本中">腳本中</option>
+                        <option value="準備剪輯">準備剪輯</option>
                         <option value="剪輯中">剪輯中</option>
                         <option value="已完成">已完成</option>
                     </select>
@@ -126,9 +133,14 @@
                             </span>
                         </div>
                         <h3 class="font-bold text-gray-800 leading-snug mb-1">{{ task.topic }}</h3>
-                        <div class="text-xs text-gray-500 flex items-center gap-1">
-                            <i class="fa-solid fa-user-tag text-gray-400"></i> {{ task.client }} 
-                            <span v-if="task.title" class="text-gray-400">({{ task.title }})</span>
+                        <div class="flex justify-between items-center text-xs text-gray-500">
+                            <div class="flex items-center gap-1">
+                                <i class="fa-solid fa-user-tag text-gray-400"></i> {{ task.client }} 
+                                <span v-if="task.title" class="text-gray-400">({{ task.title }})</span>
+                            </div>
+                            <div class="bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                                <i class="fa-solid fa-user-pen mr-1"></i>{{ task.editor || '未指派' }}
+                            </div>
                         </div>
                     </div>
 
@@ -196,6 +208,7 @@
                         <div class="flex gap-2 pt-1 border-t border-gray-200 mt-1">
                             <select v-model="task.status" class="w-1/3 text-xs border border-gray-300 rounded p-1.5 bg-white font-bold text-gray-700">
                                 <option value="腳本中">📝 腳本中</option>
+                                <option value="準備剪輯">📂 準備剪輯</option>
                                 <option value="剪輯中">✂️ 剪輯中</option>
                                 <option value="已完成">✅ 已完成</option>
                             </select>
@@ -227,6 +240,7 @@
                                         :class="statusClass(task.status, true)"
                                         class="text-xs border-0 bg-transparent font-bold cursor-pointer focus:ring-0 p-0 w-full mb-2">
                                         <option value="腳本中">腳本中</option>
+                                        <option value="準備剪輯">準備剪輯</option>
                                         <option value="剪輯中">剪輯中</option>
                                         <option value="已完成">已完成</option>
                                     </select>
@@ -322,16 +336,23 @@
             // 狀態變數
             const searchText = ref('');
             const filterStatus = ref('ALL');
-            const filterClient = ref('ALL'); // 新增：客戶篩選
-            const viewMode = ref('card');    // 新增：視圖模式 ('card' | 'list')
+            const filterClient = ref('ALL');
+            const filterEditor = ref('ALL'); // 新增：剪輯師篩選
+            const viewMode = ref('card');    
             
             const toasts = ref([]);
             const isMockData = ref(false);
 
             // 計算所有不重複的客戶列表
             const uniqueClients = computed(() => {
-                const clients = tasks.value.map(t => t.client).filter(c => c); // 取出非空客戶名
-                return [...new Set(clients)].sort(); // 去重並排序
+                const clients = tasks.value.map(t => t.client).filter(c => c);
+                return [...new Set(clients)].sort();
+            });
+
+            // 計算所有不重複的剪輯師列表
+            const uniqueEditors = computed(() => {
+                const editors = tasks.value.map(t => t.editor).filter(e => e);
+                return [...new Set(editors)].sort();
             });
 
             // 綜合篩選邏輯
@@ -341,11 +362,13 @@
                     const matchStatus = filterStatus.value === 'ALL' || t.status === filterStatus.value;
                     // 2. 客戶篩選
                     const matchClient = filterClient.value === 'ALL' || t.client === filterClient.value;
-                    // 3. 關鍵字搜尋 (主題、編號、備註)
+                    // 3. 剪輯師篩選
+                    const matchEditor = filterEditor.value === 'ALL' || t.editor === filterEditor.value;
+                    // 4. 關鍵字搜尋 (主題、編號、備註)
                     const matchText = !searchText.value || 
                         [t.topic, t.videoId, t.projectId, t.notes].some(val => String(val || '').toLowerCase().includes(searchText.value.toLowerCase()));
                     
-                    return matchStatus && matchClient && matchText;
+                    return matchStatus && matchClient && matchEditor && matchText;
                 });
             });
 
@@ -439,6 +462,7 @@
                 const colors = {
                     '已完成': isText ? 'text-green-600' : 'bg-green-100 text-green-700 border-green-200',
                     '剪輯中': isText ? 'text-blue-600' : 'bg-blue-100 text-blue-700 border-blue-200',
+                    '準備剪輯': isText ? 'text-purple-600' : 'bg-purple-100 text-purple-700 border-purple-200',
                     '腳本中': isText ? 'text-gray-500' : 'bg-gray-100 text-gray-600 border-gray-200'
                 };
                 return colors[s] || (isText ? 'text-gray-400' : 'bg-gray-50 text-gray-500 border-gray-200');
@@ -448,8 +472,8 @@
 
             return {
                 tasks, loading, error, searchText, 
-                filterStatus, filterClient, viewMode, 
-                toasts, uniqueClients, filteredTasks,
+                filterStatus, filterClient, filterEditor, viewMode, 
+                toasts, uniqueClients, uniqueEditors, filteredTasks,
                 fetchData, updateTask, statusClass, isValidUrl
             };
         }
